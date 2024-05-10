@@ -1,0 +1,5 @@
+ERM['DAA_cosine'],DAA_cosine: 0.9139,overall: 0.9139,90: 0.8725,overall: 0.8725,
+ERM['DAA_mse'],DAA_mse: 0.9306,overall: 0.9306,90: 0.8525,overall: 0.8525,
+ERM['DAA_mmd'],DAA_mmd: 0.8861,overall: 0.8861,90: 0.8525,overall: 0.8525,
+ERM['60', '120'],60: 0.9444,120: 0.9500,overall: 0.9472,90: 0.8625,overall: 0.8625,
+ERM['30', '60', '120', '150'],30: 0.9000,60: 0.9111,120: 0.8556,150: 0.8556,overall: 0.8806,90: 0.7892,overall: 0.7892,
