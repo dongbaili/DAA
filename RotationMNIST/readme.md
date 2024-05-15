@@ -11,6 +11,8 @@
 
         The file that can run DAA algorithm. It will generate .txt file that contains the selected samples, record number of samples collected from each source, and print running time.
 
+        The selected samples are in domainbed/txtlist/RMnist/xxx.txt
+
 - DAA.sh
 
         The script file to run DAA.py. You can choose k, visible_n_test, source, target and so on. Make sure to replace txtdir correctly and n should be no larger than n_train which you choosed in images.sh

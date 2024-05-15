@@ -2,6 +2,7 @@ import argparse
 import torch
 import numpy as np
 import os
+import random
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from utils import *
@@ -25,19 +26,12 @@ def get_args():
     parser.add_argument("--dis", type=str, default="mmd", choices=["mmd", "cosine", "mse"])
     return parser.parse_args()
 
-def cosineDis(vec1, vec2):
-    dot_product = np.dot(vec1, vec2)
-    norm_vec1 = np.linalg.norm(vec1)
-    norm_vec2 = np.linalg.norm(vec2)
-    return 1 - dot_product / (norm_vec1 * norm_vec2)
-
-args = get_args()
-test_state = args.test_state
-states_list = list(set(states_list) - set([test_state])) # exclude the test state
-# prepare test data
-X_t = np.load(f"data/{args.task}/{test_state}_X.npy")
-y_t = np.load(f"data/{args.task}/{test_state}_y.npy")
-g_t = np.load(f"data/{args.task}/{test_state}_g.npy")
+def setup_seed(args):
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    torch.cuda.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    random.seed(args.seed)
 
 def top(n_list, top_id, all_X, all_y):
     """
@@ -60,43 +54,57 @@ def top(n_list, top_id, all_X, all_y):
             total_y = np.concatenate([total_y, y], axis = 0)
     return total_X, total_y
 
-def DAA(n_list, all_X, all_y, top10_id, mean_t, n_per_round):
+def DAA(n_list, all_X, all_y, top10_id, mean_t, visible_X_t,  n_per_round, args):
     """
     Only do data acquisition in selected 10 envs start from the second round,
 
     You may change this "top10_id" to any "topk_id"
     """
-    mean_s = []
+    mean_s, X_s = [], []
+    selected_n_list = []
     for id in top10_id:
         X = all_X[id][:n_list[id]]
         y = all_y[id][:n_list[id]]
         mean_s.append(np.mean(X, axis = 0))
+        X_s.append(X)
+        selected_n_list.append(n_list[id])
 
+    X_s = np.concatenate(X_s)
     for j in range(1, args.k):
         print(f"Round {j}:")
         mean_s = np.array(mean_s).T
         if args.dis == "cosine":
             weights = cosineWeight(torch.tensor(mean_s), torch.tensor(mean_t), num_steps=3000, lr = args.lr, lambdda = args.lambdda)
         elif args.dis == "mmd":
-            weights = mmdWeight(torch.tensor(mean_s).T, torch.tensor(mean_t), num_steps=3000, lr = args.lr, lambdda = args.lambdda)
+            # simplified version
+            # weights = mmdWeight(torch.tensor(mean_s).T, torch.tensor(mean_t), num_steps=3000, lr = args.lr, lambdda = args.lambdda)
+            
+            # completed version
+            weights = mmdWeight(torch.tensor(X_s), torch.tensor(visible_X_t), num_steps=2000, lr = args.lr, lambdda = 0.000001, selected_n_list = selected_n_list)
         elif args.dis == "mse":
-            weights = mseWeight(mean_s, mean_t)
+            weights = mseWeight(mean_s, mean_t, args)
         else:
             raise NotImplementedError
         
+        # Use weight to collect more data
+
         total = np.sum(weights)
-        # print(weights)
         fnumbers = [(n_per_round * weights[i] / total) for i in range(len(weights))]
         sorted_indices = sorted(range(len(fnumbers)), key=lambda k: fnumbers[k] % 1, reverse=True)
         delta = [int(v) for v in fnumbers]
         i = 0
-        # print(f"delta = {delta}")
         while(np.sum(delta) < n_per_round):
             j = sorted_indices[i]
             delta[j] += 1
             i += 1
+        X_s = []
+        print(delta)
         for i, id in enumerate(top10_id):
             n_list[id] += delta[i]
+            selected_n_list[i] = n_list[id]
+            X = all_X[id][:n_list[id]]
+            X_s.append(X)
+        X_s = np.concatenate(X_s)
         mean_s = [np.mean(all_X[i][:n_list[i]], axis = 0) for i in top10_id]
 
     X = np.concatenate([all_X[i][:n_list[i]] for i in range(len(all_X))], axis = 0)
@@ -104,8 +112,8 @@ def DAA(n_list, all_X, all_y, top10_id, mean_t, n_per_round):
 
     return X, y, n_list
 
-def main():
-    model = LogisticRegression(max_iter = 3000) # all methods share the same linear model structure
+def main(args):
+    model = LogisticRegression(max_iter = 3000, random_state = args.seed) # all methods share the same linear model structure
     dis_dict = {}
     random_indices = np.random.choice(len(X_t), size=args.n_test, replace=False)
     visible_X_t = X_t[random_indices]
@@ -180,7 +188,7 @@ def main():
     wacc_3 = accuracy_score(yp, y_t)
 
     # DAA
-    X, y, n_list = DAA(n_list.copy(), all_X, all_y, top10_id, mean_t, n_per_round)
+    X, y, n_list = DAA(n_list.copy(), all_X, all_y, top10_id, mean_t, visible_X_t, n_per_round, args)
     
     yp = ERM_train_test(model, X, y, X_t) # ERM
     acc = accuracy_score(yp, y_t)
@@ -192,12 +200,21 @@ def main():
     return [acc, pacc, wacc, acc_3, pacc_3, wacc_3, acc_10, pacc_10, wacc_10, acc_uni, pacc_uni, wacc_uni]
 
 if __name__ == "__main__":
+    args = get_args()
+    setup_seed(args)
+    test_state = args.test_state
+    states_list = list(set(states_list) - set([test_state])) # exclude the test state
+    # prepare test data
+    X_t = np.load(f"data/{args.task}/{test_state}_X.npy")
+    y_t = np.load(f"data/{args.task}/{test_state}_y.npy")
+    g_t = np.load(f"data/{args.task}/{test_state}_g.npy")
+
     lists = []
     repeat_times = 5
     for i in range(repeat_times):
         np.random.seed(args.seed + i)
         print(f"test_state{args.test_state}, iter{i}")
-        acc_list = main()
+        acc_list = main(args)
         lists.append(acc_list)
         
     acc_list = np.mean(lists, axis=0)

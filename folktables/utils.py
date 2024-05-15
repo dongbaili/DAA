@@ -36,12 +36,14 @@ class MMD(nn.Module):
         
     def forward(self, X, Y, device, weight = None):
         self.kernel.to(device)
+        Y = Y.reshape(-1, X.shape[1])
         K = self.kernel(torch.vstack([X, Y]), device)
         X_size = X.shape[0]
         if weight is not None:
             xweight = torch.abs(weight).to(device)
-            xweight = xweight / xweight.sum()
-            yweight = torch.ones(1)
+            # xweight = xweight / xweight.sum()
+            yweight = torch.ones(Y.shape[0])
+            # yweight = yweight / yweight.sum()
             yweight = yweight.to(device)
             XXweight = torch.outer(xweight, xweight)
             XYweight = torch.outer(xweight, yweight)
@@ -57,17 +59,23 @@ class MMD(nn.Module):
 
         return XX - 2 * XY + YY
 
-def mmdWeight(X, y, num_steps, lr, lambdda):
+def mmdWeight(X, y, num_steps, lr, lambdda, selected_n_list = None):
     n, p = X.shape
-    weight = torch.ones(n, dtype=float)
+    if selected_n_list is None:
+        weight = torch.ones(n, dtype=float)
+    else:
+        weight = torch.ones(len(selected_n_list), dtype=float)
     weight.requires_grad = True
     optimizer = optim.Adam([weight,], lr = lr)
     mmd = MMD()
-    
+    selected_n_list = torch.tensor(selected_n_list)
     for i in range(num_steps):
         optimizer.zero_grad()
-        dis = mmd(X, y, device, weight = weight)
-        
+        if selected_n_list is not None:
+            sample_wise_weight = weight.repeat_interleave(selected_n_list)
+            dis = mmd(X, y, device, weight = sample_wise_weight)
+        else:
+            dis = mmd(X, y, device, weight = weight)
         # lasso
         loss = dis + lambdda * torch.norm(weight, p=1)
         loss.backward()
@@ -87,6 +95,12 @@ def cosine_dis(X, weight, y):
     dis = 1 - cosine_similarity(weighted_center, y)
     return dis 
 
+def cosineDis(vec1, vec2):
+    dot_product = np.dot(vec1, vec2)
+    norm_vec1 = np.linalg.norm(vec1)
+    norm_vec2 = np.linalg.norm(vec2)
+    return 1 - dot_product / (norm_vec1 * norm_vec2)
+
 def cosineWeight(X, y, num_steps, lr, lambdda):
     n, p = X.shape
     weight = torch.ones(p, dtype=float)
@@ -104,10 +118,10 @@ def cosineWeight(X, y, num_steps, lr, lambdda):
             print(f"iter {i}  dis: {dis}  loss: {loss}")
     return abs(weight).cpu().detach().numpy()
 
-def mseWeight(X, y):
-    model = LassoCV(max_iter = 5000)
+def mseWeight(X, y, args):
+    model = LassoCV(max_iter = 5000, random_state = args.seed)
     model.fit(X, y)
-    return model.coef_
+    return np.abs(model.coef_)
 
 def ERM_train_test(model, X, y, X_t):
     model.fit(X, y)
@@ -142,7 +156,7 @@ def reweight_train_test(model, total_X, y, visible_X_t, X_t):
     p = env_classifer.predict_proba(total_X)
     weight = np.divide(p[:, 1], p[:, 0] + 1e10)
     weight /= np.sum(weight)
-
+    weight += 1
     model.fit(total_X, y, sample_weight=weight)
     return model.predict(X_t)
 

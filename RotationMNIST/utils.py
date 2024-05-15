@@ -26,26 +26,33 @@ def cosineTorch(X, y, num_steps, lr, lambdda):
         # lasso
         loss = dis + lambdda * abs(weight).sum()
         if i == 0 or (i + 1) % 500 == 0:
-            print(f"iter {i}  dis: {dis}  loss: {loss} weight: {weight.tolist()}")
+            print(f"iter {i}  dis: {dis}  loss: {loss}")
             dis_list.append(dis.cpu().detach().numpy())
         loss.backward()
         optimizer.step()
 
     return abs(weight).cpu().detach().numpy(), dis_list
 
-def mmdTorch(X, y, num_steps, lr, lambdda):
+def mmdTorch(X, y, num_steps, lr, lambdda, selected_n_list = None):
     n, p = X.shape
-    # print(X.shape, y.shape)
-    weight = torch.ones(n)
+    if selected_n_list is None:
+        weight = torch.ones(n, dtype=float)
+    else:
+        weight = torch.ones(len(selected_n_list), dtype=float)
     weight = weight.to(device)
     weight.requires_grad = True
     optimizer = optim.Adam([weight,], lr = lr)
     dis_list = []
-    mmd = MMDLoss()
+    mmd = MMD()
+    selected_n_list = torch.tensor(selected_n_list).to(device)
+
     for i in range(num_steps):
         optimizer.zero_grad()
-        dis = mmd(X, y, device = device, weight = weight)
-        
+        if selected_n_list is not None:
+            sample_wise_weight = weight.repeat_interleave(selected_n_list)
+            dis = mmd(X, y, device, weight = sample_wise_weight)
+        else:
+            dis = mmd(X, y, device, weight = weight)
         # lasso
         loss = dis + lambdda * abs(weight).sum()
         if i == 0 or (i + 1) % 500 == 0:
@@ -82,7 +89,7 @@ class RBF(nn.Module):
         L2_distances = (torch.cdist(X, X) ** 2).to(device)
         return torch.exp(-L2_distances[None, ...] / (self.get_bandwidth(L2_distances, device) * self.bandwidth_multipliers)[:, None, None]).sum(dim=0)
 
-class MMDLoss(nn.Module):
+class MMD(nn.Module):
 
     def __init__(self, kernel=RBF()):
         super().__init__()
@@ -90,12 +97,15 @@ class MMDLoss(nn.Module):
         
     def forward(self, X, Y, device, weight = None):
         self.kernel.to(device)
+        Y = Y.reshape(-1, X.shape[1])
         K = self.kernel(torch.vstack([X, Y]), device)
         X_size = X.shape[0]
+        # print(X.shape, Y.shape, K.shape)
         if weight is not None:
             xweight = torch.abs(weight)
             # xweight = xweight / xweight.sum()
-            yweight = torch.ones(1)
+            yweight = torch.ones(Y.shape[0])
+            # yweight = yweight / yweight.sum()
             yweight = yweight.to(device)
 
             XXweight = torch.outer(xweight, xweight)
