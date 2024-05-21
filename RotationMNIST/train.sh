@@ -1,6 +1,6 @@
 txtdir="domainbed/txtlist"
 dataset="RMnist"
-algorithm="ERM"
+algorithm=""
 target="90"
  
 source="DAA_cosine"

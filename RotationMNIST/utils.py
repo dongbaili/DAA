@@ -104,9 +104,8 @@ class MMD(nn.Module):
         if weight is not None:
             xweight = torch.abs(weight)
             # xweight = xweight / xweight.sum()
-            yweight = torch.ones(Y.shape[0])
+            yweight = torch.ones(Y.shape[0]).to(device)
             # yweight = yweight / yweight.sum()
-            yweight = yweight.to(device)
 
             XXweight = torch.outer(xweight, xweight)
             XYweight = torch.outer(xweight, yweight)

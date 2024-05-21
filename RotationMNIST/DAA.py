@@ -7,7 +7,7 @@ import torch
 import torch.utils.data
 from domainbed.lib import misc
 
-from utils import mseSklearn, cosineTorch, mmdTorch, MMDLoss
+from utils import *
 
 def load_args():
     parser = argparse.ArgumentParser(description='Domain generalization')
@@ -55,7 +55,6 @@ if __name__ == "__main__":
     
     X_t = torch.stack(X_t).reshape(len(X_t), -1)
     y_t = labels
-    print(X_s.shape, X_t.shape)
     X = torch.cat([X_s, X_t], dim = 0)
     Y = torch.cat([torch.tensor(y_s), torch.tensor(y_t)], dim = 0)
 
@@ -81,57 +80,33 @@ if __name__ == "__main__":
             alphas = None
             # train domain weight by lasso
             weights = abs(mseSklearn(source, target.detach().cpu().numpy(), alphas))
-            # update ns based on the weight
-            total = np.sum(weights)
-            fnumbers = [(n_per_step * weights[i] / total) for i in range(len(weights))]
-            sorted_indices = sorted(range(len(fnumbers)), key=lambda k: fnumbers[k] % 1)
-            delta = [int(v) for v in fnumbers]
-            i = 0
-            while(np.sum(delta) < n_per_step):
-                j = sorted_indices[i]
-                delta[j] += 1
-                i += 1
-            ns = [ns[i] + delta[i] for i in range(len(ns))]
-            print("delta:", delta, np.sum(delta))
-            # print("weights: ", weights)
-
         elif dis == "cosine": 
             source = torch.stack(source, dim=1)
             # train domain weight by lasso
             weights, dis_list = cosineTorch(source.detach().clone(), target.detach().clone(), num_steps=1500, lr = 0.001, lambdda = 0.01)
-            # update ns based on the weight
-            total = np.sum(weights)
-            fnumbers = [(n_per_step * weights[i] / total) for i in range(len(weights))]
-            sorted_indices = sorted(range(len(fnumbers)), key=lambda k: fnumbers[k] % 1)
-            delta = [int(v) for v in fnumbers]
-            i = 0
-            while(np.sum(delta) < n_per_step):
-                j = sorted_indices[i]
-                delta[j] += 1
-                i += 1
-            ns = [ns[i] + delta[i] for i in range(len(ns))]
-            print("delta:", delta, np.sum(delta))
-            # print("weights: ", weights)
-            
         elif dis == "mmd":
             all_s = torch.vstack([X[i:i + ni] for (i,ni) in zip(indexs, ns)])
-            all_t = torch.tensor(X[-args.visible_n_test:])
+            all_t = X[-args.visible_n_test:].clone().detach()
             source = torch.stack(source, dim = 1)
-            # train domain weight by lasso
-            weights, dis_list = mmdTorch(source.detach().clone().T, target.detach().clone(), num_steps=1000, lr = 0.01, lambdda = 0.001)
-            # update ns based on the weight
-            total = np.sum(weights)
-            fnumbers = [(n_per_step * weights[i] / total) for i in range(len(weights))]
-            sorted_indices = sorted(range(len(fnumbers)), key=lambda k: fnumbers[k] % 1)
-            delta = [int(v) for v in fnumbers]
-            i = 0
-            while(np.sum(delta) < n_per_step):
-                j = sorted_indices[i]
-                delta[j] += 1
-                i += 1
-            ns = [ns[i] + delta[i] for i in range(len(ns))]
-            print("delta:", delta, np.sum(delta))
-            # print("weights: ", weights)
+            
+            # simplified version
+            # weights, dis_list = mmdTorch(source.detach().clone().T, target.detach().clone(), num_steps=1000, lr = 0.01, lambdda = 0.001)
+
+            # completed version
+            weights, dis_list = mmdTorch(all_s, all_t, num_steps=1000, lr = 0.01, lambdda = 0.001, selected_n_list = ns)
+        # update ns based on the weight
+        total = np.sum(weights)
+        fnumbers = [(n_per_step * weights[i] / total) for i in range(len(weights))]
+        sorted_indices = sorted(range(len(fnumbers)), key=lambda k: fnumbers[k] % 1)
+        delta = [int(v) for v in fnumbers]
+        i = 0
+        while(np.sum(delta) < n_per_step):
+            j = sorted_indices[i]
+            delta[j] += 1
+            i += 1
+        ns = [ns[i] + delta[i] for i in range(len(ns))]
+        print("delta:", delta, np.sum(delta))
+        # print("weights: ", weights)
 
     end = time.time()
     # record number of samples from each source domain
