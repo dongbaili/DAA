@@ -16,7 +16,7 @@ def get_data():
         if not os.path.exists(f"data/{task}"):
             os.makedirs(f"data/{task}")
         for state in states_list:
-            data = data_source.get_data(states=[state], download=False)
+            data = data_source.get_data(states=[state], download=True)
             features, labels, groups = Dataset[task].df_to_numpy(data)
             np.save(f"data/{task}/{state}_X", features)
             np.save(f"data/{task}/{state}_y", labels)
