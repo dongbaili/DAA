@@ -80,7 +80,7 @@ def DAA(n_list, all_X, all_y, top10_id, mean_t, visible_X_t,  n_per_round, args)
             # weights = mmdWeight(torch.tensor(mean_s).T, torch.tensor(mean_t), num_steps=3000, lr = args.lr, lambdda = args.lambdda)
             
             # completed version
-            weights = mmdWeight(torch.tensor(X_s), torch.tensor(visible_X_t), num_steps=2000, lr = args.lr, lambdda = 0.000001, selected_n_list = selected_n_list)
+            weights = mmdWeight(torch.tensor(X_s), torch.tensor(visible_X_t), num_steps=2000, lr = args.lr, lambdda = args.lambdda, selected_n_list = selected_n_list)
         elif args.dis == "mse":
             weights = mseWeight(mean_s, mean_t, args)
         else:
@@ -98,7 +98,6 @@ def DAA(n_list, all_X, all_y, top10_id, mean_t, visible_X_t,  n_per_round, args)
             delta[j] += 1
             i += 1
         X_s = []
-        print(delta)
         for i, id in enumerate(top10_id):
             n_list[id] += delta[i]
             selected_n_list[i] = n_list[id]
@@ -213,7 +212,7 @@ if __name__ == "__main__":
     repeat_times = 5
     for i in range(repeat_times):
         np.random.seed(args.seed + i)
-        print(f"test_state{args.test_state}, iter{i}")
+        print(f"test_state{args.test_state}, repeat{i}")
         acc_list = main(args)
         lists.append(acc_list)
         
