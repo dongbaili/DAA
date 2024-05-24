@@ -32,6 +32,8 @@ def setup_seed(args):
     torch.cuda.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 def top(n_list, top_id, all_X, all_y):
     """
@@ -209,9 +211,8 @@ if __name__ == "__main__":
     g_t = np.load(f"data/{args.task}/{test_state}_g.npy")
 
     lists = []
-    repeat_times = 5
+    repeat_times = 3
     for i in range(repeat_times):
-        np.random.seed(args.seed + i)
         print(f"test_state{args.test_state}, repeat{i}")
         acc_list = main(args)
         lists.append(acc_list)

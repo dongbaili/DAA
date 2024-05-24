@@ -1,10 +1,10 @@
 task="ACSEmployment"
 test_state="HI"
 lr=0.001
-k=6
+k=5
 T=2000
 
-lambdda=0.001
+lambdda=0.0001
 dis="mmd"
 python main.py --test_state $test_state --T $T --k $k --lr $lr --lambdda $lambdda --task $task --dis $dis
 
